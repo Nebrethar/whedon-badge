@@ -1,0 +1,131 @@
+#!/usr/bin/env ruby
+require_relative "../lib/whedon"
+require 'thor'
+
+class WhedonCli < Thor
+  desc "reviews", "Lists open reviews"
+  def reviews
+    Whedon::Paper.list
+  end
+
+  desc "tags", "List tags for a paper"
+  def tags(issue_id)
+    review = Whedon::Review.new(issue_id)
+    processor = Whedon::Processor.new(issue_id, review.issue_body)
+
+    paper_paths = processor.find_paper_paths
+    tags = Whedon::Paper.new(issue_id, paper_paths.first).tags
+
+    if tags
+      puts tags.join(',')
+    else
+      puts ""
+    end
+  end
+
+  desc "open", "Open browser for review"
+  def open(issue_id)
+    `open https://github.com/#{ENV['REVIEW_REPOSITORY']}/issues/#{issue_id}`
+  end
+
+  desc "verify", "Check the key values in the review issue"
+  def verify(issue_id)
+    Whedon::Paper.new(issue_id).audit
+  end
+
+  desc "download", "Download the repo"
+  def download(issue_id, custom_path=nil, paper_path=nil)
+    Whedon::Paper.new(issue_id, custom_path, paper_path).download
+  end
+
+  desc "prepare", "Just prepare the PDF (optional second argument of custom git branch, optional third argument for custom path)"
+  def prepare(issue_id, custom_path=nil, custom_branch=nil)
+    review = Whedon::Review.new(issue_id)
+    processor = Whedon::Processor.new(issue_id, review.issue_body, custom_path)
+    processor.archive_doi = 'PENDING'
+
+    # Optionally set the path to work in
+    path = custom_path ? custom_path : "tmp/#{issue_id}"
+    
+    # Need to checkout the new branch before looking for the paper.
+    `cd #{path} && git checkout #{custom_branch} --quiet` if custom_branch
+
+    paper_paths = processor.find_paper_paths(path)
+
+    if paper_paths.empty?
+      abort("Can't find any papers to compile :-(")
+    elsif paper_paths.size == 1
+      processor.set_paper(paper_paths.first)
+      processor.generate_pdf(custom_branch)
+    else
+      puts "Looks like we found more than one possible paper:"
+      paper_paths.each_with_index { |path, index| puts "#{index+1}. #{path}"}
+      selected_paper = ask("Pick which paper you want:")
+      paper_path = paper_paths[selected_paper.to_i - 1]
+      puts "Setting paper_path to #{paper_paths}"
+      processor.set_paper(paper_path)
+      processor.generate_pdf(custom_branch)
+    end
+  end
+
+  desc "compile", "Compile the paper and XML metadata"
+  def compile(issue_id, custom_path=nil, custom_branch=nil)
+    review = Whedon::Review.new(issue_id)
+    processor = Whedon::Processor.new(issue_id, review.issue_body, custom_path)
+
+    # Optionally set the path to work in
+    path = custom_path ? custom_path : "tmp/#{issue_id}"
+    
+    # Need to checkout the new branch before looking for the paper.
+    `cd #{path} && git checkout #{custom_branch} --quiet` if custom_branch
+
+    paper_paths = processor.find_paper_paths(path)
+
+    if paper_paths.empty?
+      abort("Can't find any papers to compile :-(")
+    elsif paper_paths.size == 1
+      processor.set_paper(paper_paths.first)
+      processor.compile
+    else
+      puts "Looks like we found more than one possible paper:"
+      paper_paths.each_with_index { |path, index| puts "#{index+1}. #{path}"}
+      selected_paper = ask("Pick which paper you want:")
+      paper_path = paper_paths[selected_paper.to_i - 1]
+      puts "Setting paper_path to #{paper_paths}"
+      processor.set_paper(paper_path)
+      processor.compile
+    end
+  end
+
+  desc "deposit", "Deposit the metadata with the JOSS application and Crossref"
+  def deposit(issue_id, custom_path=nil, custom_branch=nil)
+    review = Whedon::Review.new(issue_id)
+    processor = Whedon::Processor.new(issue_id, review.issue_body, custom_path)
+    
+    # Optionally set the path to work in
+    path = custom_path ? custom_path : "tmp/#{issue_id}"
+
+    # Need to checkout the new branch before looking for the paper.
+    `cd #{path} && git checkout #{custom_branch} --quiet` if custom_branch
+    
+    paper_paths = processor.find_paper_paths(path)
+
+    if paper_paths.empty?
+      abort("Can't find any papers to process :-(")
+    elsif paper_paths.size == 1
+      puts "Setting paper_path to #{paper_paths.first}"
+      processor.set_paper(paper_paths.first)
+      processor.deposit
+    else
+      puts "Looks like we found more than one possible paper:"
+      paper_paths.each_with_index { |path, index| puts "#{index+1}. #{path}"}
+      selected_paper = ask("Pick which paper you want:")
+      paper_path = paper_paths[selected_paper.to_i - 1]
+      puts "Setting paper_path to #{paper_paths}"
+      processor.set_paper(paper_path)
+      processor.deposit
+    end
+  end
+end
+
+WhedonCli.start
