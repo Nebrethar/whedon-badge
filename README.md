@@ -1,4 +1,4 @@
-# What is Whedon?
+# THIS IS A WIP REPOSITORY BASED ON THE WHEDON BOT BY THE JOURNAL OF OPEN SOURCE SOFTWARE
 
 Whedon is a collection of command-line utilities to manage JOSS submissions. Whedon is used by the [Whedon-API bot](https://github.com/openjournals/whedon-api) to interact with authors and reviewers during the review process on https://github.com/openjournals/joss-reviews
 
